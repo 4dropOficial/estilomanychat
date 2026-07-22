@@ -1,0 +1,67 @@
+name: Extrair ZIP Automaticamente
+
+on:
+  push:
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract-zip:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Encontrar arquivos ZIP
+        id: find-zip
+        run: |
+          ZIP_FILES=$(find . -name "*.zip" -type f)
+          if [ -z "$ZIP_FILES" ]; then
+            echo "Nenhum arquivo ZIP encontrado"
+            exit 0
+          fi
+          echo "zip_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$ZIP_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Deszipar arquivos
+        if: steps.find-zip.outputs.zip_files != ''
+        run: |
+          for zip_file in $(find . -name "*.zip" -type f); do
+            echo "Descompactando: $zip_file"
+            
+            # Obter o diretório do ZIP
+            zip_dir=$(dirname "$zip_file")
+            zip_name=$(basename "$zip_file" .zip)
+            
+            # Criar pasta para extrair
+            extract_dir="$zip_dir/$zip_name"
+            mkdir -p "$extract_dir"
+            
+            # Deszipar
+            unzip -q "$zip_file" -d "$extract_dir"
+            
+            echo "✓ Descompactado em: $extract_dir"
+          done
+
+      - name: Configurar Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Fazer Commit dos arquivos descompactados
+        run: |
+          git add -A
+          if ! git diff --quiet --cached; then
+            git commit -m "🤖 Arquivos descompactados automaticamente"
+            git push
+          else
+            echo "Nenhuma alteração para fazer commit"
+          fi
